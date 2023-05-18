@@ -1,15 +1,10 @@
 package be.masi_liege_g2_2223;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import java.io.IOException;
 import java.net.Socket;
 import java.util.Scanner;
 
 public class MainApplication {
-	
 	private static final String host = "localhost";
 	private static final int port = 9025;
 
@@ -19,13 +14,14 @@ public class MainApplication {
 	        socket = new Socket(host, port);
 	        socket.setTcpNoDelay(true);
 	    } catch (IOException e) {
-	        System.out.println("Impossible de se connecter � la carte");
+	        System.out.println("Impossible de se connecter à la carte");
 	        return;
 	    }
 
 	    JCManager jcManager = new JCManager(socket);
 	    jcManager.connect();
 
+		String token = APIClientUtil.login();
 	    boolean fin = false;
 	    Scanner scanner = new Scanner(System.in);
 
@@ -38,30 +34,34 @@ public class MainApplication {
 	        int id = jcManager.getId();
 	        if (id == 0) {
 				System.out.println("---------------------------");
-				System.out.println("No ID found. Initialising id...");
+				System.out.println("No ID found. Initializing ID...");
 				System.out.println("---------------------------");
 
-				//TODO get jwt from API
-				String response = APIClientUtil.login("https://192.168.0.246:443/auth/signin",
-						"user_card", "password_card");
+				System.out.print("Enter your username (maximum 16 characters): ");
+				String username = scanner.nextLine();
 
-				try {
-					ObjectMapper objectMapper = new ObjectMapper();
-					JsonNode jsonNode = objectMapper.readTree(response);
-
-					String token = jsonNode.get("token").asText();
-					System.out.println("Token: " + token);
-				} catch (JsonMappingException e) {
-					System.out.println("");;
+				while (username.length() > 16) {
+					System.out.println("Username exceeds the maximum length. Please try again.");
+					System.out.print("Enter your username (maximum 16 characters): ");
+					username = scanner.nextLine();
 				}
 
-				//TODO get id from username
+				String userId = String.valueOf(APIClientUtil.getUserId(username, token));
+				int userPoints = APIClientUtil.getUserPoints(userId, token);
+				jcManager.setPoints(userPoints);
 
-
-				jcManager.setId(1);
+				if (userId.equals(String.valueOf(-1))) {
+					System.out.println("Failed to retrieve userId. Card not initialised");
+					continue;
+				} else {
+					jcManager.setId(Integer.parseInt(userId));
+					System.out.println("Card initialized with ID: " + userId);
+				}
 	        } else {
-	        	// Synchro points
-	        }
+				String userId = String.valueOf(jcManager.getId());
+				int userPoints = APIClientUtil.getUserPoints(userId, token);
+				jcManager.setPoints(userPoints);
+			}
 
 	        System.out.println("1- Interroger le compteur");
 	        System.out.println("2- Incrementer le compteur");
@@ -98,6 +98,7 @@ public class MainApplication {
 	                    if (currentPoints != -1) {
 	                        int totalPoints = currentPoints + pointsToAdd;
 	                        jcManager.setPoints(totalPoints);
+							APIClientUtil.setUserPoints(jcManager.getId(), pointsToAdd, token);
 	                    }
 	                } catch (Exception e) {
 	                    System.out.println("Erreur lors de la somme : " + e.getMessage());
@@ -107,6 +108,7 @@ public class MainApplication {
 	            case 3:
 	                int pointsToDeduct;
 	                do {
+
 	                    System.out.print("Entrez un nombre entre 1 et 50 : ");
 	                    pointsToDeduct = scanner.nextInt();
 
@@ -120,9 +122,10 @@ public class MainApplication {
 	                    if (currentPoints != -1) {
 	                        int totalPoints = currentPoints - pointsToDeduct;
 	                        jcManager.setPoints(totalPoints);
-	                    }
+							APIClientUtil.setUserPoints(jcManager.getId(), pointsToDeduct*=-1, token);
+						}
 	                } catch (Exception e) {
-	                    System.out.println("Erreur lors de la d�duction : " + e.getMessage());
+	                    System.out.println("Erreur lors de la déduction : " + e.getMessage());
 	                }
 	                break;
 
@@ -143,5 +146,4 @@ public class MainApplication {
 	    jcManager.disconnect();
 	    socket.close();
 	}
-
 }
